@@ -12,7 +12,6 @@ def MidLayerVectorLoss(femap1,femap2):
     tensor_vector1, tensor_vector2 = getMidLayerVector(femap1, femap2)
     return torch.nn.MSELoss()(tensor_vector1, tensor_vector2)
 
-
 def getMidLayerVector(femap1,femap2):
     tensor_vector1 = torch.ones((femap1[0].shape[0], 0)).cuda()
     tensor_vector2 = torch.ones((femap2[0].shape[0], 0)).cuda()
@@ -21,7 +20,6 @@ def getMidLayerVector(femap1,femap2):
         tensor_vector2 = torch.cat([tensor_vector2, fe2.cuda()], 1)
 
     return tensor_vector1, tensor_vector2
-
 
 class Lossfunc(torch.nn.Module):
     def __init__(self,alpha1,alpha2):
@@ -38,7 +36,6 @@ class Lossfunc(torch.nn.Module):
         # print(term11,term12,term2)
         return self.alpha1 * (term11+term12),self.alpha2 * term2
 
-
 class adversarial_trainig():
     def __init__(self):
         self.loss = Lossfunc(alpha1,alpha2)
@@ -49,8 +46,9 @@ class adversarial_trainig():
 
     def run(self,epochs):
         classifier.train()
-        temp_ori, temp_advs = 0, 0
+        best_acc = 0
         for epoch in range(epochs):
+            temp_ori, temp_advs, temp_num = 0, 0, 0
             for iter, (oris, advs, labels) in enumerate(train_loader):
                 oris = oris.cuda()
                 advs = advs.cuda()
@@ -62,24 +60,30 @@ class adversarial_trainig():
                 pred_advs = torch.argmax(logits_advs, dim=1)
                 temp_ori += torch.sum(pred_ori == labels)
                 temp_advs += torch.sum(pred_advs == labels)
+                temp_num += len(labels)
 
                 loss1,loss2 = self.loss(logits_ori,logits_advs,
                                         labels,femap_ori,femap_advs)
                 loss = loss1 + loss2
-                print(loss1.data,loss2.data)
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
+            log = "Epoch-{} ori_acc:{} advs_acc:{} loss1:{} loss2:{}".\
+                format(epoch,temp_ori/temp_num,temp_advs/temp_num,loss1,loss2)
+            logInfo(log,logger)
             if (epoch+1) % save_epoch_step == 0:
                 classifier.eval()
-                validate(epoch,logger)
+                acc = validate(epoch,logger)
+                if acc > best_acc:
+                    best_acc = acc
+                    torch.save(classifier.state_dict(),
+                               weight_path + "/{}.pt".format(model_name))
+                    logInfo("save best at epoch {} with acc {}".format(epoch,best_acc),logger)
+
                 torch.save(classifier.state_dict(),
                            weight_path + "/{}-{}.pt".format(model_name, epoch))
                 classifier.train()
-
-            logInfo(log, logger)
-
 
 def mkdir_for_(save_weight,model_name,attack_method):
     os.chdir(save_weight)
@@ -119,9 +123,7 @@ def test(logger):
 
     acc1 = sum_ori / sum_num
     acc2 = sum_advs / sum_num
-
-    log = "Test ori_acc: {} advs_acc:{}".format(acc1, acc2)
-    logInfo(log,logger)
+    logInfo("Test ori_acc: {} advs_acc:{}".format(acc1, acc2),logger)
 
 def validate(epoch,logger):
     classifier.eval()
@@ -144,6 +146,8 @@ def validate(epoch,logger):
     log="Validation Epoch {} ori_acc: {} advs_acc:{} ".format(epoch,acc1,acc2)
     logInfo(log,logger)
 
+    return acc1 + acc2
+
 def logInfo(log,logger):
     print(log)
     print(log,file=logger,flush=True)
@@ -152,7 +156,6 @@ if __name__=="__main__":
 
     victim_model_list = ["ShuffleNetv2","MobileNetv2"]
     source_attack_list = ["FGSM", "DIFGSM", "MIFGSM","PGD"]
-
     for model_name in victim_model_list:
         for attack_method in source_attack_list:
             weight_path = mkdir_for_(save_weight,model_name,attack_method)
