@@ -7,10 +7,11 @@ def get_loader(model_name,
                attack_method,
                validation_split = 0.1,
                test_split = 0.1,
-               test_batch_size = 2):
+               test_batch_size = 2,
+               stage = "train"):
 
 
-    data_dir = ADV_imageNet_dir + "/" +model_name + "/" + attack_method
+    data_dir = adv_datasets + "/" +model_name + "/" + attack_method
     datasets = train_imageNet_datasets(data_dir)
     dataset_size = len(datasets)
     indices = list(range(dataset_size))
@@ -28,9 +29,6 @@ def get_loader(model_name,
     train_sampler = SubsetRandomSampler(train_indices)
     valid_sampler = SubsetRandomSampler(val_indices)
     test_sampler = SubsetRandomSampler(test_indices)
-
-
-
 
     train_loader = DataLoader(datasets, batch_size=train_batch_size,
                               sampler=train_sampler,num_workers=num_workers)

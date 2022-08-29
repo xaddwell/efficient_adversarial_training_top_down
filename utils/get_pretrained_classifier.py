@@ -1,9 +1,14 @@
 import torch
 from models import ResNet18_30,Mobilenet_v2_30,ResNet18_with_feature
 from models import ShuffleNet_v2_30,Densenet121_30,ShuffleNet_with_feature
-from ..config import *
+import sys
+sys.path.append("..")
 
-def get_trained_classifier(model_name,use_cuda=True,feature_map = False):
+
+def get_trained_classifier(model_root_dir,
+                           model_name,
+                           use_cuda=True,
+                           feature_map = False):
 
     if model_name == 'ResNet18':
         model = ResNet18_30(feature_map=feature_map)
