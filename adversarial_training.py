@@ -104,9 +104,8 @@ def initial_log(log_root_path,model_name,attack_method):
     return filename
 
 def test(logger):
-    sum_ori = 0
-    sum_advs = 0
-    sum_num = 0
+    sum_ori,sum_advs,sum_num = 0,0,0
+    classifier.eval()
     for iter, (oris, advs, labels) in enumerate(test_loader):
         oris = oris.cuda()
         advs = advs.cuda()
