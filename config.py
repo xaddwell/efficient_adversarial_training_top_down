@@ -11,8 +11,8 @@ training_lr = 0.001
 training_weight_decay = 1e-4
 shuffle_training_dataset = True
 random_seed = 42
-train_batch_size = 4
-validation_batch_size = 2
+train_batch_size = 128
+validation_batch_size = 64
 num_workers = 2
 
 alpha1 = 1
