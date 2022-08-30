@@ -6,8 +6,7 @@ from utils.imageNet_datasets import train_imageNet_datasets
 def get_loader(datasets,
                validation_split = 0.1,
                test_split = 0.1,
-               test_batch_size = 2,
-               stage = "train"):
+               test_batch_size = 2):
 
     dataset_size = len(datasets)
     indices = list(range(dataset_size))

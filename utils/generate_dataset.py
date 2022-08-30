@@ -44,21 +44,15 @@ def generate_datasets(_method,target_class=None,use_cuda = True):
     if target_class != None:
         atk.set_target_class(target_class)
 
-    advs_num = 0
-    for j,item in tqdm(enumerate(dataloader)):
+    for j,item in enumerate(dataloader):
         x,y = item
         if use_cuda:
             x = x.cuda()
             y = y.cuda()
         advs = atk(x,y)
-        advs_pred = torch.argmax(target_model(advs),1)
-        pred = torch.argmax(target_model(x),1)
         for i in range(len(y)):
-            if pred[i] == y[i]:
-                vutils.save_image(advs[i].cpu(), save_datasets_dir+"/advs/{}_{}_{}.jpg".format(j,i,y[i]), normalize=False) #保存对抗样本
-                vutils.save_image(x[i].cpu(), save_datasets_dir + "/ori/{}_{}_{}.jpg".format(j,i,y[i]), normalize=False) #保存干净样本
-                advs_num+=1
-        print("advs_num:{}".format(advs_num))
+            vutils.save_image(advs[i].cpu(), save_datasets_dir+"/advs/{}_{}_{}.jpg".format(j,i,y[i]), normalize=False) #保存对抗样本
+            vutils.save_image(x[i].cpu(), save_datasets_dir + "/ori/{}_{}_{}.jpg".format(j,i,y[i]), normalize=False) #保存干净样本
 
 def get_classifier(model_name,use_cuda=True):
 
@@ -113,6 +107,6 @@ if __name__ == "__main__":
     for target_model_name in tqdm(["ResNet18","ShuffleNetv2"]):
         target_model = get_classifier(target_model_name).cuda()
         target_model.eval()
-        for atk_method in tqdm(["PGD","DIFGSM","MIFGSM","FGSM"]):
+        for atk_method in tqdm(["PGD","DIFGSM","FGSM"]):
             save_datasets_dir = initial_datasets_dir(target_model_name,atk_method)
             generate_datasets(target_class=None,_method=atk_method)

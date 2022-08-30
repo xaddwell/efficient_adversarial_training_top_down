@@ -9,9 +9,10 @@ from utils.imageNet_datasets import train_imageNet_datasets
 from utils.get_pretrained_classifier import get_trained_classifier
 
 # Loss
-def MidLayerVectorLoss(femap1,femap2):
+def MidLayerVectorLoss(femap1,femap2,delta):
     tensor_vector1, tensor_vector2 = getMidLayerVector(femap1, femap2)
-    return torch.nn.MSELoss()(tensor_vector1, tensor_vector2)
+    delta = delta.unsqueeze(1)
+    return torch.nn.MSELoss()(tensor_vector1/delta, tensor_vector2/delta)
 
 def getMidLayerVector(femap1,femap2):
     tensor_vector1 = torch.ones((femap1[0].shape[0], 0)).cuda()
@@ -19,8 +20,18 @@ def getMidLayerVector(femap1,femap2):
     for fe1,fe2 in zip(femap1,femap2):
         tensor_vector1 = torch.cat([tensor_vector1, fe1.cuda()], 1)
         tensor_vector2 = torch.cat([tensor_vector2, fe2.cuda()], 1)
-
     return tensor_vector1, tensor_vector2
+
+def CWLoss(logits, target, kappa=-5.):
+    target = torch.ones(
+        logits.size(0)).type(torch.cuda.FloatTensor).mul(target.float())
+    target_one_hot = Variable(
+        torch.eye(1000).type(torch.cuda.FloatTensor)[target.long()].cuda())
+    real = torch.sum(target_one_hot * logits, 1)
+    other = torch.max((1 - target_one_hot) * logits - (target_one_hot * 10000), 1)[0]
+    kappa = torch.zeros_like(other).fill_(kappa)
+
+    return torch.sum(torch.max(other - real, kappa))
 
 class Lossfunc(torch.nn.Module):
     def __init__(self,alpha1,alpha2):
@@ -30,11 +41,11 @@ class Lossfunc(torch.nn.Module):
         self.loss_ce = torch.nn.CrossEntropyLoss()
         self.loss_mse = torch.nn.MSELoss()
 
-    def forward(self,pred_ori,pred_advs,labels,midlayer_ori,midlayer_advs):
+    def forward(self,pred_ori,pred_advs,labels,
+                midlayer_ori,midlayer_advs,delta):
         term11 = self.loss_ce(pred_ori,labels)
         term12 = self.loss_ce(pred_advs,labels)
-        term2 = MidLayerVectorLoss(midlayer_ori,midlayer_advs)
-        # print(term11,term12,term2)
+        term2 = MidLayerVectorLoss(midlayer_ori[1:-2],midlayer_advs[1:-2],delta)
         return self.alpha1 * (term11+term12),self.alpha2 * term2
 
 class adversarial_trainig():
@@ -50,28 +61,44 @@ class adversarial_trainig():
         best_acc = 0
         for epoch in range(epochs):
             temp_ori, temp_advs, temp_num = 0, 0, 0
+            sum_loss1,sum_loss2 = 0,0
             for iter, (oris, advs, labels) in enumerate(train_loader):
                 oris = oris.cuda()
                 advs = advs.cuda()
+                delta = torch.abs(advs-oris).mean([1,2,3]).cuda()
                 labels = labels.cuda()
-
                 logits_ori, femap_ori = classifier(oris)
                 logits_advs, femap_advs = classifier(advs)
                 pred_ori = torch.argmax(logits_ori, dim=1)
                 pred_advs = torch.argmax(logits_advs, dim=1)
-                temp_ori += torch.sum(pred_ori == labels)
-                temp_advs += torch.sum(pred_advs == labels)
-                temp_num += len(labels)
+                sum_ori = torch.sum(pred_ori == labels)
+                sum_advs = torch.sum(pred_advs == labels)
+                sum_num = len(labels)
+
+                temp_ori += sum_ori
+                temp_advs += sum_advs
+                temp_num += sum_num
 
                 loss1,loss2 = self.loss(logits_ori,logits_advs,
-                                        labels,femap_ori,femap_advs)
+                                        labels,femap_ori,femap_advs,delta)
                 loss = loss1 + loss2
+                sum_loss1 += loss1
+                sum_loss2 += loss2
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
-            log = "Epoch-{} ori_acc:{} advs_acc:{} loss1:{} loss2:{}".\
-                format(epoch,temp_ori/temp_num,temp_advs/temp_num,loss1,loss2)
+                log = "Epoch-{} iter-{} ori_acc:{} advs_acc:{} loss1:{:0.3e} loss2:{:0.3e}". \
+                    format(epoch,iter,sum_ori / sum_num,sum_advs / sum_num,loss1,loss2)
+                # logInfo(log, logger)
+
+            log = "Last Epoch-{} ori_acc:{} advs_acc:{} loss1:{:0.3e} loss2:{:0.3e}".\
+                format(epoch,
+                       temp_ori/temp_num,
+                       temp_advs/temp_num,
+                       sum_loss1/temp_num,
+                       sum_loss2/temp_num)
+
             logInfo(log,logger)
             if (epoch+1) % save_epoch_step == 0:
                 classifier.eval()
@@ -123,7 +150,7 @@ def test(logger):
 
     acc1 = sum_ori / sum_num
     acc2 = sum_advs / sum_num
-    logInfo("Test ori_acc: {} advs_acc:{}".format(acc1, acc2),logger)
+    logInfo("Testing ori_acc: {} advs_acc:{}".format(acc1, acc2),logger)
 
 def validate(epoch,logger):
     classifier.eval()
@@ -143,7 +170,8 @@ def validate(epoch,logger):
 
     acc1 = sum_ori/sum_num
     acc2 = sum_advs / sum_num
-    log="Validation Epoch {} ori_acc: {} advs_acc:{} ".format(epoch,acc1,acc2)
+    log="Validation Epoch-{} ori_acc: {} advs_acc:{} "\
+        .format(epoch,acc1,acc2)
     logInfo(log,logger)
 
     return acc1 + acc2
@@ -165,7 +193,7 @@ if __name__=="__main__":
                 model_name = model_name+"_with_allfea",
                 feature_map=True).cuda()
 
-            log_path = initial_log(log_path, model_name, attack_method)
+            log_path = initial_log(log_root_path, model_name, attack_method)
             logger = open(log_path,'w')
             log = "victim_model:{} atk_method:{}".format(model_name, attack_method)
             logInfo(log, logger)
