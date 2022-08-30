@@ -3,16 +3,12 @@ import numpy as np
 from torch.utils.data import SubsetRandomSampler,DataLoader
 from utils.imageNet_datasets import train_imageNet_datasets
 
-def get_loader(model_name,
-               attack_method,
+def get_loader(datasets,
                validation_split = 0.1,
                test_split = 0.1,
                test_batch_size = 2,
                stage = "train"):
 
-
-    data_dir = adv_datasets + "/" +model_name + "/" + attack_method
-    datasets = train_imageNet_datasets(data_dir)
     dataset_size = len(datasets)
     indices = list(range(dataset_size))
     split1 = int(np.floor(validation_split * dataset_size))

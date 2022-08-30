@@ -1,10 +1,11 @@
-import torch
-from torch.autograd import Variable
-import sys
-from config import *
 import os
+import sys
+import torch
 import datetime
+from config import *
+from torch.autograd import Variable
 from utils.get_trainingloader import get_loader
+from utils.imageNet_datasets import train_imageNet_datasets
 from utils.get_pretrained_classifier import get_trained_classifier
 
 # Loss
@@ -157,17 +158,23 @@ if __name__=="__main__":
     source_attack_list = ["FGSM", "DIFGSM", "MIFGSM","PGD"]
     for model_name in victim_model_list:
         for attack_method in source_attack_list:
+
             weight_path = mkdir_for_(save_weight,model_name,attack_method)
-            filename = initial_log(log_path,model_name,attack_method)
-            classifier = \
-                get_trained_classifier(model_root_dir=model_root_dir,
-                                       model_name = model_name+"_with_allfea",
-                                       feature_map=True).cuda()
-            logger = open(filename,'w')
+            classifier = get_trained_classifier(
+                model_root_dir=model_root_dir,
+                model_name = model_name+"_with_allfea",
+                feature_map=True).cuda()
+
+            log_path = initial_log(log_path, model_name, attack_method)
+            logger = open(log_path,'w')
             log = "victim_model:{} atk_method:{}".format(model_name, attack_method)
             logInfo(log, logger)
+
+            data_dir = train_datasets_dir + "/" + model_name + "/" + attack_method
+            datasets = train_imageNet_datasets(data_dir)
             train_loader,validation_loader,test_loader = \
-                get_loader(model_name,attack_method)
+                get_loader(datasets)
+
             trainer = adversarial_trainig()
             trainer.run(epochs=train_epochs)
             test(logger)
