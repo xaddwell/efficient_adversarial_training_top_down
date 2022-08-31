@@ -25,7 +25,6 @@ def get_trained_classifier(model_root_dir,
         model = ResNet18_with_feature(feature_map=feature_map)
         model_name = model_name.split("_")[0]
 
-
     model_dir = model_root_dir + '/{}.pt'.format(model_name)
 
     if model_name:

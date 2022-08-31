@@ -18,6 +18,7 @@ generate_data_batch_size = 128
 validation_split = .1
 test_split = .1
 num_workers = 2
+random_eplison = False
 
 alpha1 = 1
 alpha2 = 2

@@ -1,8 +1,10 @@
 import os
 import sys
 import torch
+import random
 import datetime
 from config import *
+import torchattacks as ta
 from torch.autograd import Variable
 from utils.get_trainingloader import get_loader
 from utils.imageNet_datasets import train_imageNet_datasets
@@ -49,12 +51,28 @@ class Lossfunc(torch.nn.Module):
         return self.alpha1 * (term11+term12),self.alpha2 * term2
 
 class adversarial_trainig():
-    def __init__(self):
+    def __init__(self,attack_method):
         self.loss = Lossfunc(alpha1,alpha2)
+        self.atk_method = attack_method
         self.optimizer = \
             torch.optim.Adam(classifier.parameters(),
                              weight_decay=training_weight_decay,
                              lr=training_lr)
+
+    def atk(self,oris,labels,m = 8,steps = 10):
+        _method = self.atk_method
+        if _method == "PGD":
+            atk = ta.PGD(classifier, eps=m / 255, alpha=4 / 255, steps=steps)
+        elif _method == "FGSM":
+            atk = ta.FGSM(classifier, eps=m / 255)
+        elif _method == "TIFGSM":
+            atk = ta.TIFGSM(classifier, eps=m / 255, alpha=4 / 255, steps=steps)
+        elif _method == "MIFGSM":
+            atk = ta.MIFGSM(classifier, eps=m / 255, alpha=4 / 255, steps=steps)
+        elif _method == "DIFGSM":
+            atk = ta.DIFGSM(classifier, eps=m / 255, alpha=4 / 255, steps=steps)
+
+        return atk(oris, labels)
 
     def run(self,epochs):
         classifier.train()
@@ -64,7 +82,11 @@ class adversarial_trainig():
             sum_loss1,sum_loss2 = 0,0
             for iter, (oris, advs, labels) in enumerate(train_loader):
                 oris = oris.cuda()
-                advs = advs.cuda()
+                if random_eplison:
+                    _eplison = random.randint(2,10)
+                    advs = self.atk(oris,labels,_eplison).cuda()
+                else:
+                    advs = advs.cuda()
                 delta = torch.abs(advs-oris).mean([1,2,3]).cuda()
                 labels = labels.cuda()
                 logits_ori, femap_ori = classifier(oris)
@@ -115,12 +137,14 @@ class adversarial_trainig():
 
 def mkdir_for_(save_weight,model_name,attack_method):
     os.chdir(save_weight)
+    if random_eplison:
+        _atk_name = attack_method + "_random_eplison"
     if not os.path.exists(model_name):
         os.mkdir(model_name)
     os.chdir(model_name)
-    if not os.path.exists(attack_method):
-        os.mkdir(attack_method)
-    os.chdir(attack_method)
+    if not os.path.exists(_atk_name):
+        os.mkdir(_atk_name)
+    os.chdir(_atk_name)
     cwd_path = os.getcwd()
     os.chdir(root_dir)
     return cwd_path
@@ -183,7 +207,7 @@ def logInfo(log,logger):
 if __name__=="__main__":
 
     victim_model_list = ["ShuffleNetv2","MobileNetv2"]
-    source_attack_list = ["FGSM", "DIFGSM", "MIFGSM","PGD"]
+    source_attack_list = ["PGD"]
     for model_name in victim_model_list:
         for attack_method in source_attack_list:
 
@@ -195,7 +219,8 @@ if __name__=="__main__":
 
             log_path = initial_log(log_root_path, model_name, attack_method)
             logger = open(log_path,'w')
-            log = "victim_model:{} atk_method:{}".format(model_name, attack_method)
+            log = "victim_model:{} atk_method:{} random_eplison:{}".\
+                format(model_name, attack_method,random_eplison)
             logInfo(log, logger)
 
             data_dir = train_datasets_dir + "/" + model_name + "/" + attack_method
@@ -203,6 +228,6 @@ if __name__=="__main__":
             train_loader,validation_loader,test_loader = \
                 get_loader(datasets)
 
-            trainer = adversarial_trainig()
+            trainer = adversarial_trainig(attack_method)
             trainer.run(epochs=train_epochs)
             test(logger)
