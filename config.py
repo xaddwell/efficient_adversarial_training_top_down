@@ -19,11 +19,13 @@ validation_split = .1
 test_split = .1
 num_workers = 2
 random_eplison = True
-batch_decrete = True
+batch_decrete = False
 
-alpha1 = 1
+loss_func = "CE"
+
+alpha1 = 0.5
 alpha2 = 2
-train_epochs = 120
+train_epochs = 50
 
 
 

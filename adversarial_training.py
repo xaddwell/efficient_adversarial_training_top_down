@@ -25,7 +25,7 @@ def getMidLayerVector(femap1,femap2):
         tensor_vector2 = torch.cat([tensor_vector2, fe2.cuda()], 1)
     return tensor_vector1, tensor_vector2
 
-def CWLoss(logits, target, kappa=-5.):
+def CWLoss(logits, target, kappa=-1.):
     target = torch.ones(
         logits.size(0)).type(torch.cuda.FloatTensor).mul(target.float())
     target_one_hot = Variable(
@@ -46,8 +46,12 @@ class Lossfunc(torch.nn.Module):
 
     def forward(self,pred_ori,pred_advs,labels,
                 midlayer_ori,midlayer_advs,delta):
-        term11 = self.loss_ce(pred_ori,labels)
-        term12 = self.loss_ce(pred_advs,labels)
+        if loss_func == "CW":
+            term11 = CWLoss(pred_ori,labels)
+            term12 = CWLoss(pred_advs,labels)
+        else:
+            term11 = self.loss_ce(pred_ori, labels)
+            term12 = self.loss_ce(pred_advs, labels)
         term2 = MidLayerVectorLoss(midlayer_ori[1:-2],midlayer_advs[1:-2],delta)
         return self.alpha1 * (term11+term12),self.alpha2 * term2
 
@@ -237,8 +241,8 @@ if __name__=="__main__":
 
             log_path = initial_log(log_root_path, model_name, attack_method)
             logger = open(log_path,'w')
-            log = "victim_model:{} atk_method:{} random_eplison:{} batch_decrete:{}".\
-                format(model_name, attack_method,random_eplison,batch_decrete)
+            log = "victim_model:{} atk_method:{} random_eplison:{} batch_decrete:{} loss_mode:{}".\
+                format(model_name, attack_method,random_eplison,batch_decrete,loss_func)
             logInfo(log, logger)
 
             data_dir = train_datasets_dir + "/" + model_name + "/" + attack_method
