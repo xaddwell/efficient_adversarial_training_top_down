@@ -54,6 +54,7 @@ class adversarial_trainig():
     def __init__(self,attack_method):
         self.loss = Lossfunc(alpha1,alpha2)
         self.atk_method = attack_method
+        self.atk_api = None
         self.optimizer = \
             torch.optim.Adam(classifier.parameters(),
                              weight_decay=training_weight_decay,
@@ -71,15 +72,21 @@ class adversarial_trainig():
         elif _method == "DIFGSM":
             atk = ta.DIFGSM(classifier, eps=m / 255, alpha=4 / 255, steps=steps)
 
-        self.atk = atk
+        self.atk_api = atk
 
     def atk(self,oris,labels,steps = 10,min=2,max=8):
         _method = self.atk_method
-        advs = oris.detach()
-        for i in range(len(labels)):
-            m = random.randint(min,max)
-            self.get_atk(_method,m,steps)
-            advs[i] = self.atk(oris[i].unsqueeze(0),labels[i].unsqueeze(0))
+        if batch_decrete:
+            advs = oris.detach()
+            for i in range(len(labels)):
+                m = random.randint(min,max)
+                self.get_atk(_method,m,steps)
+                advs[i] = self.atk(oris[i].unsqueeze(0),labels[i].unsqueeze(0))[0]
+        else:
+            m = random.randint(min, max)
+            self.get_atk(_method, m, steps)
+            advs = self.atk_api(oris,labels)
+
         return advs
 
     def run(self,epochs):
@@ -228,8 +235,8 @@ if __name__=="__main__":
 
             log_path = initial_log(log_root_path, model_name, attack_method)
             logger = open(log_path,'w')
-            log = "victim_model:{} atk_method:{} random_eplison:{}".\
-                format(model_name, attack_method,random_eplison)
+            log = "victim_model:{} atk_method:{} random_eplison:{} batch_decrete:{}".\
+                format(model_name, attack_method,random_eplison,batch_decrete)
             logInfo(log, logger)
 
             data_dir = train_datasets_dir + "/" + model_name + "/" + attack_method
