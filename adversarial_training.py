@@ -50,6 +50,7 @@ class Lossfunc(torch.nn.Module):
         term2 = MidLayerVectorLoss(midlayer_ori[1:-2],midlayer_advs[1:-2],delta)
         return self.alpha1 * (term11+term12),self.alpha2 * term2
 
+
 class adversarial_trainig():
     def __init__(self,attack_method):
         self.loss = Lossfunc(alpha1,alpha2)
@@ -59,8 +60,7 @@ class adversarial_trainig():
                              weight_decay=training_weight_decay,
                              lr=training_lr)
 
-    def atk(self,oris,labels,m = 8,steps = 10):
-        _method = self.atk_method
+    def get_atk(self,_method,m,steps):
         if _method == "PGD":
             atk = ta.PGD(classifier, eps=m / 255, alpha=4 / 255, steps=steps)
         elif _method == "FGSM":
@@ -72,7 +72,16 @@ class adversarial_trainig():
         elif _method == "DIFGSM":
             atk = ta.DIFGSM(classifier, eps=m / 255, alpha=4 / 255, steps=steps)
 
-        return atk(oris, labels)
+        self.atk = atk
+
+    def atk(self,oris,labels,steps = 10,min=2,max=8):
+        _method = self.atk_method
+        advs = oris.detach()
+        for i in range(len(labels)):
+            m = random.randint(min,max)
+            self.get_atk(_method,m,steps)
+            advs[i] = self.atk(oris[i].unsqueeze(0),labels[i].unsqueeze(0))
+        return advs
 
     def run(self,epochs):
         classifier.train()
@@ -81,12 +90,11 @@ class adversarial_trainig():
             temp_ori, temp_advs, temp_num = 0, 0, 0
             sum_loss1,sum_loss2 = 0,0
             for iter, (oris, advs, labels) in enumerate(train_loader):
-                oris = oris.cuda()
                 if random_eplison:
-                    _eplison = random.randint(2,10)
-                    advs = self.atk(oris,labels,_eplison).cuda()
+                    advs = self.atk(oris,labels).cuda()
                 else:
                     advs = advs.cuda()
+                oris = oris.cuda()
                 delta = torch.abs(advs-oris).mean([1,2,3]).cuda()
                 labels = labels.cuda()
                 logits_ori, femap_ori = classifier(oris)
@@ -110,11 +118,11 @@ class adversarial_trainig():
                 loss.backward()
                 self.optimizer.step()
 
-                log = "Epoch-{} iter-{} ori_acc:{} advs_acc:{} loss1:{:0.3e} loss2:{:0.3e}". \
+                log = "Epoch-{} iter-{} ori_acc:{:0.3f} advs_acc:{:0.3f} loss1:{:0.3f} loss2:{:0.3f}". \
                     format(epoch,iter,sum_ori / sum_num,sum_advs / sum_num,loss1,loss2)
-                # logInfo(log, logger)
+                logInfo(log, logger)
 
-            log = "Last Epoch-{} ori_acc:{} advs_acc:{} loss1:{:0.3e} loss2:{:0.3e}".\
+            log = "Last Epoch-{} ori_acc:{:0.3f} advs_acc:{:0.3f} loss1:{:0.3f} loss2:{:0.3f}".\
                 format(epoch,
                        temp_ori/temp_num,
                        temp_advs/temp_num,
@@ -129,7 +137,7 @@ class adversarial_trainig():
                     best_acc = acc
                     torch.save(classifier.state_dict(),
                                weight_path + "/{}.pt".format(model_name))
-                    logInfo("save best at epoch {} with acc {}".format(epoch,best_acc),logger)
+                    logInfo("save best at epoch {} with acc {:0.3f}".format(epoch,best_acc),logger)
 
                 torch.save(classifier.state_dict(),
                            weight_path + "/{}-{}.pt".format(model_name, epoch))
@@ -137,8 +145,7 @@ class adversarial_trainig():
 
 def mkdir_for_(save_weight,model_name,attack_method):
     os.chdir(save_weight)
-    if random_eplison:
-        _atk_name = attack_method + "_random_eplison"
+    _atk_name = attack_method + "_random_eplison" if random_eplison else attack_method
     if not os.path.exists(model_name):
         os.mkdir(model_name)
     os.chdir(model_name)
@@ -174,7 +181,7 @@ def test(logger):
 
     acc1 = sum_ori / sum_num
     acc2 = sum_advs / sum_num
-    logInfo("Testing ori_acc: {} advs_acc:{}".format(acc1, acc2),logger)
+    logInfo("Testing ori_acc: {:0.3f} advs_acc:{:0.3f}".format(acc1, acc2),logger)
 
 def validate(epoch,logger):
     classifier.eval()
@@ -194,7 +201,7 @@ def validate(epoch,logger):
 
     acc1 = sum_ori/sum_num
     acc2 = sum_advs / sum_num
-    log="Validation Epoch-{} ori_acc: {} advs_acc:{} "\
+    log="Validation Epoch-{} ori_acc: {:0.3f} advs_acc:{:0.3f} "\
         .format(epoch,acc1,acc2)
     logInfo(log,logger)
 
@@ -206,8 +213,8 @@ def logInfo(log,logger):
 
 if __name__=="__main__":
 
-    victim_model_list = ["ShuffleNetv2","MobileNetv2"]
-    source_attack_list = ["PGD"]
+    victim_model_list = ["ResNet18","ShuffleNetv2"]
+    source_attack_list = ["PGD","FGSM","DIFGSM"]
     for model_name in victim_model_list:
         for attack_method in source_attack_list:
 

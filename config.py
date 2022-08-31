@@ -18,11 +18,11 @@ generate_data_batch_size = 128
 validation_split = .1
 test_split = .1
 num_workers = 2
-random_eplison = False
+random_eplison = True
 
 alpha1 = 1
 alpha2 = 2
-train_epochs = 10
+train_epochs = 120
 
 
 
