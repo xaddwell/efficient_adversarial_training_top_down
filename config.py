@@ -7,7 +7,7 @@ save_weight = r"D:\cjh\Adversarial_training\weight/"
 log_root_path = r'D:\cjh\Adversarial_training\log/'
 train_datasets_dir = root_dir + r"\datasets/"
 
-save_epoch_step = 1
+save_epoch_step = 5
 training_lr = 0.001
 training_weight_decay = 1e-4
 shuffle_training_dataset = True

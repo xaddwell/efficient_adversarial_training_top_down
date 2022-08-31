@@ -50,7 +50,6 @@ class Lossfunc(torch.nn.Module):
         term2 = MidLayerVectorLoss(midlayer_ori[1:-2],midlayer_advs[1:-2],delta)
         return self.alpha1 * (term11+term12),self.alpha2 * term2
 
-
 class adversarial_trainig():
     def __init__(self,attack_method):
         self.loss = Lossfunc(alpha1,alpha2)
@@ -88,7 +87,7 @@ class adversarial_trainig():
         best_acc = 0
         for epoch in range(epochs):
             temp_ori, temp_advs, temp_num = 0, 0, 0
-            sum_loss1,sum_loss2 = 0,0
+            sum_loss1,sum_loss2, sum_num = 0,0,0
             for iter, (oris, advs, labels) in enumerate(train_loader):
                 if random_eplison:
                     advs = self.atk(oris,labels).cuda()
@@ -103,11 +102,11 @@ class adversarial_trainig():
                 pred_advs = torch.argmax(logits_advs, dim=1)
                 sum_ori = torch.sum(pred_ori == labels)
                 sum_advs = torch.sum(pred_advs == labels)
-                sum_num = len(labels)
 
                 temp_ori += sum_ori
                 temp_advs += sum_advs
-                temp_num += sum_num
+                temp_num += len(labels)
+                sum_num += 1
 
                 loss1,loss2 = self.loss(logits_ori,logits_advs,
                                         labels,femap_ori,femap_advs,delta)
@@ -119,15 +118,19 @@ class adversarial_trainig():
                 self.optimizer.step()
 
                 log = "Epoch-{} iter-{} ori_acc:{:0.3f} advs_acc:{:0.3f} loss1:{:0.3f} loss2:{:0.3f}". \
-                    format(epoch,iter,sum_ori / sum_num,sum_advs / sum_num,loss1,loss2)
+                    format(epoch,iter,
+                           sum_ori / train_batch_size,
+                           sum_advs / train_batch_size,
+                           loss1,loss2)
+
                 logInfo(log, logger)
 
             log = "Last Epoch-{} ori_acc:{:0.3f} advs_acc:{:0.3f} loss1:{:0.3f} loss2:{:0.3f}".\
                 format(epoch,
                        temp_ori/temp_num,
                        temp_advs/temp_num,
-                       sum_loss1/temp_num,
-                       sum_loss2/temp_num)
+                       sum_loss1/sum_num,
+                       sum_loss2/sum_num)
 
             logInfo(log,logger)
             if (epoch+1) % save_epoch_step == 0:
@@ -217,7 +220,6 @@ if __name__=="__main__":
     source_attack_list = ["PGD","FGSM","DIFGSM"]
     for model_name in victim_model_list:
         for attack_method in source_attack_list:
-
             weight_path = mkdir_for_(save_weight,model_name,attack_method)
             classifier = get_trained_classifier(
                 model_root_dir=model_root_dir,
