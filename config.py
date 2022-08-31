@@ -19,7 +19,7 @@ validation_split = .1
 test_split = .1
 num_workers = 2
 random_eplison = True
-batch_decrete = False
+batch_decrete = True
 
 alpha1 = 1
 alpha2 = 2

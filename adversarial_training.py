@@ -3,6 +3,7 @@ import sys
 import torch
 import random
 import datetime
+import numpy as np
 from config import *
 import torchattacks as ta
 from torch.autograd import Variable
@@ -54,7 +55,6 @@ class adversarial_trainig():
     def __init__(self,attack_method):
         self.loss = Lossfunc(alpha1,alpha2)
         self.atk_method = attack_method
-        self.atk_api = None
         self.optimizer = \
             torch.optim.Adam(classifier.parameters(),
                              weight_decay=training_weight_decay,
@@ -72,20 +72,22 @@ class adversarial_trainig():
         elif _method == "DIFGSM":
             atk = ta.DIFGSM(classifier, eps=m / 255, alpha=4 / 255, steps=steps)
 
-        self.atk_api = atk
+        return atk
 
     def atk(self,oris,labels,steps = 10,min=2,max=8):
         _method = self.atk_method
         if batch_decrete:
-            advs = oris.detach()
+            advs = torch.zeros((0,3,224,224)).cuda()
             for i in range(len(labels)):
                 m = random.randint(min,max)
-                self.get_atk(_method,m,steps)
-                advs[i] = self.atk(oris[i].unsqueeze(0),labels[i].unsqueeze(0))[0]
+                atk_api = self.get_atk(_method,m,steps)
+                advs = torch.cat((advs,atk_api(
+                    oris[i].unsqueeze(0),
+                    labels[i].unsqueeze(0))),0)
         else:
             m = random.randint(min, max)
-            self.get_atk(_method, m, steps)
-            advs = self.atk_api(oris,labels)
+            atk_api = self.get_atk(_method, m, steps)
+            advs = atk_api(oris,labels)
 
         return advs
 
